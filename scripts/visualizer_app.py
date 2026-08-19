@@ -10,7 +10,8 @@ import os
 import sys
 import json
 import argparse
-from typing import Optional
+from typing import Optional, Dict, List, Any, Tuple
+
 
 # Reconfigure stdout/stderr for Windows console UTF-8 support
 if hasattr(sys.stdout, "reconfigure"):
