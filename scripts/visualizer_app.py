@@ -183,7 +183,7 @@ async def api_image(video_id: str, frame_idx: int, frame_id: Optional[str] = Non
 @app.get("/", response_class=HTMLResponse)
 async def index_page():
     """Giao diện Web VBS Hiện đại, Sang trọng và Trực quan."""
-    html_content = """
+    html_content = r"""
     <!DOCTYPE html>
     <html lang="vi">
     <head>
