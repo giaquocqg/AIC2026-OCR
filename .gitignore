@@ -1,0 +1,35 @@
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+
+# Excluded by User Request
+*.pdf
+AIC-2026-Baseline-v1.ipynb
+AIC2026/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Data & Test Artifacts
+data/ocr_results/
+data/cache/
+tests/temp_test_dataset/
+*.checkpoint.json
+*.index_checkpoint.json
+
+# Binary & Database files
+*.bin
+*.parquet
+*.db
+*.sqlite
+*.sqlite3
+
+# OS Specific
+.DS_Store
+Thumbs.db

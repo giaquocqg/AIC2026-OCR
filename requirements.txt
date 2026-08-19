@@ -1,0 +1,32 @@
+# ==============================================================================
+# AI Challenge TP.HCM 2026 - Bảng A (Sinh viên, thanh niên)
+# Module: OCR & Text Retrieval Pipeline (T02)
+# ==============================================================================
+
+# Core Deep Learning & Computer Vision
+torch>=2.0.0
+torchvision>=0.15.0
+opencv-python-headless>=4.8.0
+albumentations>=1.3.0
+Pillow>=9.5.0
+numpy>=1.24.0
+
+# OCR Engines
+paddlepaddle>=2.5.0
+paddleocr>=2.7.0
+vietocr>=0.3.8
+
+# Data Storage & High-Speed Indexing
+pandas>=2.0.0
+pyarrow>=14.0.0
+pydantic>=2.0.0
+PyYAML>=6.0.0
+
+# Acceleration & Utilities
+tqdm>=4.65.0
+
+# Interactive VBS UI & API
+streamlit>=1.30.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
+requests>=2.31.0

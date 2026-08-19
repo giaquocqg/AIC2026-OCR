@@ -1,0 +1,57 @@
+# ==============================================================================
+# OCR Pipeline Configuration - AI Challenge TP.HCM 2026 (Bảng A)
+# ==============================================================================
+
+pipeline:
+  name: "AIC2026_OCR_Hybrid_Engine"
+  version: "1.0.0"
+  device: "cuda" # 'cuda' or 'cpu'
+
+preprocessor:
+  max_image_dim: 1600            # Resize max side to keep aspect ratio
+  min_image_dim: 640
+  blur_laplacian_threshold: 40.0 # Frames with variance < 40 are classified as blurry
+  enable_adaptive_clahe: true    # Contrast enhancement for dark/egocentric market scenes
+  clahe_clip_limit: 2.0
+  clahe_grid_size: [8, 8]
+
+detector:
+  engine: "paddleocr"            # 'paddleocr' DBNet++
+  use_angle_cls: true            # Detect text orientation (0, 90, 180, 270)
+  det_db_thresh: 0.3             # Binarization threshold
+  det_db_box_thresh: 0.5         # Box filtering threshold
+  det_db_unclip_ratio: 1.6       # Polygon expansion ratio
+  min_box_area: 80.0             # Discard boxes smaller than 80 px^2
+
+recognizer:
+  engine: "hybrid"               # 'hybrid' (VietOCR for Vietnamese scene text + Paddle for digits/code)
+  vietocr_model: "vgg_transformer" # 'vgg_transformer' or 'vgg_seq2seq'
+  paddle_rec_lang: "vi"          # 'vi' or 'latin' / 'en'
+  batch_size: 64                 # GPU Batch Size for Recognition
+  min_confidence: 0.40           # Discard texts with confidence < 0.40
+
+postprocessor:
+  normalize_unicode: true        # Convert to Unicode NFC
+  standardize_tones: true        # Standardize Vietnamese tone marks (hòa thay vì hoà)
+  generate_unsigned: true        # Generate lowercase unaccented text for fuzzy retrieval
+  extract_entities: true         # Extract price tags, quantities, phone numbers, license plates
+
+deduplicator:
+  enable_temporal_merge: true    # Deduplicate redundant text across adjacent keyframes
+  similarity_threshold: 0.85     # Levenshtein similarity to merge
+  max_frame_gap: 15              # Max keyframe distance to consider for merging
+
+metadata:
+  fps_file: "AIC2026/data/metadata/fps.json"
+  index_file: "AIC2026/data/keyframe/keyframe/index.json"
+  youtube_url_file: "AIC2026/data/metadata/Youtube_URL.json"
+  default_fps: 25.0
+
+storage:
+  output_dir: "data/ocr_results"
+  parquet_filename: "ocr_index.parquet"
+  sqlite_db_filename: "ocr_fts.db"
+  backend_ocr_json: "ocr.json"
+  es_bulk_jsonl: "frames_ocr_bulk.jsonl"
+  cache_dir: "data/cache"
+
