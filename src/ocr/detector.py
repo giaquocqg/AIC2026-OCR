@@ -72,33 +72,49 @@ class TextDetector:
 
         if self.detector is not None:
             try:
-                # PaddleOCR detection
-                results = self.detector.ocr(image_bgr, rec=False, cls=True)
-                if results and len(results) > 0 and results[0]:
-                    raw_boxes = results[0]
-                    for box in raw_boxes:
-                        poly = np.array(box, dtype=np.float32)
-                        area = cv2.contourArea(poly)
-                        if area < self.min_box_area:
-                            continue
+                raw_boxes = []
+                # Thử gọi theo chuẩn PaddleOCR 2.x
+                try:
+                    results = self.detector.ocr(image_bgr, rec=False, cls=True)
+                    if results and len(results) > 0 and results[0]:
+                        raw_boxes = results[0]
+                except (TypeError, Exception):
+                    # Fallback sang PaddleOCR 3.x / PaddleX predict API
+                    predict_res = self.detector.predict(image_bgr)
+                    for p in predict_res:
+                        if hasattr(p, 'get'):
+                            boxes = p.get('dt_polys') or p.get('boxes') or p.get('points')
+                            if boxes:
+                                raw_boxes.extend(boxes)
+                        elif isinstance(p, (list, tuple)):
+                            raw_boxes.extend(p)
 
-                        # Tính normalized bounding box [ymin, xmin, ymax, xmax]
-                        xmin = max(0.0, float(np.min(poly[:, 0])) / w)
-                        xmax = min(1.0, float(np.max(poly[:, 0])) / w)
-                        ymin = max(0.0, float(np.min(poly[:, 1])) / h)
-                        ymax = min(1.0, float(np.max(poly[:, 1])) / h)
+                for box in raw_boxes:
+                    poly = np.array(box, dtype=np.float32)
+                    if poly.ndim != 2 or len(poly) < 4:
+                        continue
+                    area = cv2.contourArea(poly)
+                    if area < self.min_box_area:
+                        continue
 
-                        # Crop và nắn thẳng (Perspective Rectification)
-                        crop_img = self.crop_and_rectify(image_bgr, poly)
+                    # Tính normalized bounding box [ymin, xmin, ymax, xmax]
+                    xmin = max(0.0, float(np.min(poly[:, 0])) / w)
+                    xmax = min(1.0, float(np.max(poly[:, 0])) / w)
+                    ymin = max(0.0, float(np.min(poly[:, 1])) / h)
+                    ymax = min(1.0, float(np.max(poly[:, 1])) / h)
 
-                        detections.append({
-                            "polygon": poly.astype(int).tolist(),
-                            "bbox_norm": [ymin, xmin, ymax, xmax],
-                            "area": float(area),
-                            "crop_img": crop_img
-                        })
+                    # Crop và nắn thẳng (Perspective Rectification)
+                    crop_img = self.crop_and_rectify(image_bgr, poly)
+
+                    detections.append({
+                        "polygon": poly.astype(int).tolist(),
+                        "bbox_norm": [ymin, xmin, ymax, xmax],
+                        "area": float(area),
+                        "crop_img": crop_img
+                    })
             except Exception as e:
                 logger.warning(f"Lỗi khi thực thi text detection: {e}")
+
 
 
         return detections
