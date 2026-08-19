@@ -631,23 +631,33 @@ async def index_page():
 
                 const grid = document.getElementById('resultsGrid');
                 const countElem = document.getElementById('resultsCount');
-                countElem.innerText = "Đang truy vấn SQLite FTS5...";
+                countElem.innerText = "Dang truy van SQLite FTS5...";
                 grid.innerHTML = "";
 
                 try {
-                    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&entity=${currentEntity}&top_k=100`);
+                    const params = new URLSearchParams();
+                    params.set('q', q);
+                    params.set('entity', currentEntity);
+                    params.set('top_k', '100');
+                    const res = await fetch('/api/search?' + params.toString());
+                    if (!res.ok) {
+                        const errBody = await res.text();
+                        countElem.innerText = "Loi server: " + res.status + " - " + errBody.substring(0, 100);
+                        return;
+                    }
                     const data = await res.json();
                     currentResults = data.results || [];
 
-                    countElem.innerText = `Tìm thấy ${currentResults.length} kết quả cho "${q}" (< 5ms)`;
+                    countElem.innerText = 'Tim thay ' + currentResults.length + ' ket qua cho "' + q + '" (< 5ms)';
 
                     if (currentResults.length === 0) {
-                        grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-muted);">Không tìm thấy frame nào khớp với từ khóa.</div>`;
+                        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-muted);">Khong tim thay frame nao khop voi tu khoa.</div>';
                         return;
                     }
 
                     renderCards(currentResults);
                 } catch (err) {
+
                     countElem.innerText = "Lỗi truy vấn: " + err.message;
                 }
             }
@@ -655,48 +665,71 @@ async def index_page():
             function renderCards(results) {
                 const grid = document.getElementById('resultsGrid');
                 grid.innerHTML = "";
+                console.log('[renderCards] rendering', results.length, 'cards');
 
                 results.forEach((r, idx) => {
-                    const card = document.createElement('div');
-                    card.className = "card";
+                    try {
+                        const card = document.createElement('div');
+                        card.className = "card";
 
-                    const entitiesHtml = (r.entities && r.entities.length > 0)
-                        ? r.entities.map(e => `<span class="entity-badge">${e.type}: ${e.value}</span>`).join(' ')
-                        : '';
+                        const entitiesHtml = (r.entities && r.entities.length > 0)
+                            ? r.entities.map(e => '<span class="entity-badge">' + escapeHtml(e.type) + ': ' + escapeHtml(e.value) + '</span>').join(' ')
+                            : '';
 
-                    const ytButton = r.youtube_url 
-                        ? `<a href="${r.youtube_url}" target="_blank" class="btn-sub" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;background:rgba(239,68,68,0.2);color:#FCA5A5;border:1px solid rgba(239,68,68,0.4);">▶ YouTube</a>`
-                        : '';
+                        const ytButton = r.youtube_url
+                            ? '<a href="' + escapeHtml(r.youtube_url) + '" target="_blank" class="btn-sub" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;background:rgba(239,68,68,0.2);color:#FCA5A5;border:1px solid rgba(239,68,68,0.4);">&#9654; YouTube</a>'
+                            : '';
 
-                    card.innerHTML = `
-                        <div class="image-container">
-                            <img src="/api/image?video_id=${r.video_id}&frame_idx=${r.frame_idx}&frame_id=${encodeURIComponent(r.frame_id || '')}" 
-                                 class="keyframe-img" 
-                                 alt="${r.video_id} ${r.frame_idx}"
-                                 onerror="this.onerror=null; this.style.display='none'; this.parentNode.innerHTML='<div style=\\'color:#64748B;font-size:0.8rem;text-align:center;padding:1rem;\\'>[Keyframe ${r.video_id} - #${r.frame_idx}]</div>';">
-                            <div class="img-overlay-badge">#${idx + 1} | ID:${r.frame_id || r.video_id}</div>
-                        </div>
-                        <div class="card-body">
-                            <div class="ocr-text-box">
-                                <div class="ocr-text">${escapeHtml(r.text)}</div>
-                                ${entitiesHtml}
-                            </div>
-                            <div class="card-meta">
-                                <span>Video: ${r.video_id}</span>
-                                <span>Frame: ${r.frame_idx}</span>
-                                <span>Time: ${r.timestamp_str}</span>
-                                <span>Conf: ${(r.confidence * 100).toFixed(0)}%</span>
-                            </div>
-                            <div class="submission-actions">
-                                <button class="btn-sub" onclick="copyText('${r.submission_kis}', this)">Copy KIS</button>
-                                <button class="btn-sub" onclick="copyText('${r.submission_qa}', this)">Copy Q&A</button>
-                                ${ytButton}
-                            </div>
-                        </div>
-                    `;
-                    grid.appendChild(card);
+                        const imgUrl = '/api/image?video_id=' + encodeURIComponent(r.video_id) + '&frame_idx=' + r.frame_idx + '&frame_id=' + encodeURIComponent(r.frame_id || '');
+
+                        card.innerHTML = '<div class="image-container">'
+                            + '<img src="' + imgUrl + '" class="keyframe-img" alt="' + escapeHtml(r.video_id + ' ' + r.frame_idx) + '">'
+                            + '<div class="img-overlay-badge">#' + (idx + 1) + ' | ID:' + escapeHtml(r.frame_id || r.video_id) + '</div>'
+                            + '</div>'
+                            + '<div class="card-body">'
+                            + '<div class="ocr-text-box">'
+                            + '<div class="ocr-text">' + escapeHtml(r.text) + '</div>'
+                            + entitiesHtml
+                            + '</div>'
+                            + '<div class="card-meta">'
+                            + '<span>Video: ' + escapeHtml(r.video_id) + '</span>'
+                            + '<span>Frame: ' + r.frame_idx + '</span>'
+                            + '<span>Time: ' + escapeHtml(r.timestamp_str || '') + '</span>'
+                            + '<span>Conf: ' + (r.confidence * 100).toFixed(0) + '%</span>'
+                            + '</div>'
+                            + '<div class="submission-actions">'
+                            + '<button class="btn-sub" data-kis="' + escapeHtml(r.submission_kis || '') + '">Copy KIS</button>'
+                            + '<button class="btn-sub" data-qa="' + escapeHtml(r.submission_qa || '') + '">Copy Q&amp;A</button>'
+                            + ytButton
+                            + '</div>'
+                            + '</div>';
+
+                        // Attach event listeners instead of inline onclick
+                        const kisBtn = card.querySelector('[data-kis]');
+                        if (kisBtn) kisBtn.addEventListener('click', function() { copyText(r.submission_kis || '', this); });
+                        const qaBtn = card.querySelector('[data-qa]');
+                        if (qaBtn) qaBtn.addEventListener('click', function() { copyText(r.submission_qa || '', this); });
+
+                        // Handle image error via JS instead of inline onerror
+                        const img = card.querySelector('img');
+                        if (img) {
+                            img.addEventListener('error', function() {
+                                this.style.display = 'none';
+                                const fallback = document.createElement('div');
+                                fallback.style.cssText = 'color:#64748B;font-size:0.8rem;text-align:center;padding:1rem;';
+                                fallback.textContent = '[Keyframe ' + r.video_id + ' - #' + r.frame_idx + ']';
+                                this.parentNode.appendChild(fallback);
+                            });
+                        }
+
+                        grid.appendChild(card);
+                    } catch (cardErr) {
+                        console.error('[renderCards] Error rendering card', idx, cardErr);
+                    }
                 });
+                console.log('[renderCards] done, grid children:', grid.children.length);
             }
+
 
             function copyText(text, btn) {
                 navigator.clipboard.writeText(text).then(() => {
