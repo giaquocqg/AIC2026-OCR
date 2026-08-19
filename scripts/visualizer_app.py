@@ -38,6 +38,40 @@ INDEX_MAP: Dict[str, str] = {}  # frame_id -> relative_path from index.json
 VIDEO_FRAME_TO_PATH: Dict[tuple, str] = {}
 
 
+def get_searcher():
+    global SEARCHER
+    if SEARCHER:
+        return SEARCHER
+    
+    # 1. Thử load file DB
+    if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 1024:
+        try:
+            SEARCHER = OCRIndexSearcher(DB_PATH)
+            return SEARCHER
+        except Exception:
+            pass
+
+    # 2. Nếu DB chưa build xong, nạp trực tiếp từ .ocr_records_checkpoint.jsonl
+    checkpoint_jsonl = os.path.join(os.path.dirname(DB_PATH), ".ocr_records_checkpoint.jsonl")
+    if os.path.exists(checkpoint_jsonl):
+        try:
+            records = []
+            with open(checkpoint_jsonl, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        records.append(json.loads(line))
+            if records:
+                from src.ocr.indexer import OCRIndexer
+                indexer = OCRIndexer(output_dir=os.path.dirname(DB_PATH))
+                db_path = indexer.build_sqlite_fts5(records, db_filename=os.path.basename(DB_PATH))
+                SEARCHER = OCRIndexSearcher(db_path)
+                return SEARCHER
+        except Exception as e:
+            print(f"Error loading checkpoint records: {e}")
+
+    return None
+
+
 @app.get("/api/search")
 async def api_search(
     q: str = Query(..., description="Query string"),
@@ -46,10 +80,11 @@ async def api_search(
     entity: Optional[str] = Query(None, description="Filter by entity type"),
     min_conf: float = Query(0.30, description="Minimum confidence threshold")
 ):
-    if not SEARCHER:
-        raise HTTPException(status_code=500, detail="Searcher not initialized. DB not loaded.")
+    searcher = get_searcher()
+    if not searcher:
+        raise HTTPException(status_code=500, detail="Searcher not initialized. No OCR records found.")
     
-    results = SEARCHER.search(
+    results = searcher.search(
         query=q,
         top_k=top_k,
         video_filter=video if video else None,
@@ -57,6 +92,7 @@ async def api_search(
         min_confidence=min_conf
     )
     return JSONResponse(content={"query": q, "total": len(results), "results": results})
+
 
 
 @app.get("/api/frame_details")
