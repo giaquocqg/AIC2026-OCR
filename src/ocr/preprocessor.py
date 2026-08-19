@@ -8,7 +8,11 @@ import os
 import json
 import cv2
 import numpy as np
+import logging
 from typing import Dict, Any, Tuple, Optional, Union, List
+
+logger = logging.getLogger("src.ocr.preprocessor")
+
 
 
 
@@ -141,8 +145,8 @@ class FrameMetadataMapper:
                     data = json.load(f)
                     if isinstance(data, dict):
                         self.fps_map = {k: float(v) for k, v in data.items()}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Không thể đọc file fps.json từ '{fps_input}': {e}")
 
     def _load_youtube_map(self, yt_input: Union[str, List[Dict[str, str]], Dict[str, str]]):
         """Nạp danh sách URL YouTube của các video."""
@@ -162,8 +166,8 @@ class FrameMetadataMapper:
                                 self.youtube_map[item["video_id"]] = item["watch_url"]
                     elif isinstance(data, dict):
                         self.youtube_map = data
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Không thể đọc file Youtube_URL.json từ '{yt_input}': {e}")
 
     def _load_index_file(self, index_input: Union[str, Dict[str, str]]):
         """Nạp file index.json (190k frame) để ánh xạ 2 chiều chính xác với Milvus vector store."""
@@ -174,8 +178,9 @@ class FrameMetadataMapper:
             try:
                 with open(index_input, "r", encoding="utf-8") as f:
                     raw_map = json.load(f)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Không thể đọc file index.json từ '{index_input}': {e}")
+
 
         for fid_str, rel_path in raw_map.items():
             # rel_path: "L21_V001/keyframe_75.webp"

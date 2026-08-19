@@ -131,15 +131,21 @@ class TemporalDeduplicator:
             flat_records = []
             for fr in frame_records:
                 vid = fr.get("video_id", "")
+                f_id = fr.get("frame_id", "")
                 f_idx = fr.get("frame_idx", 0)
+                t_sec = fr.get("timestamp", 0.0)
                 t_ms = fr.get("timestamp_ms", 0)
                 t_str = fr.get("timestamp_str", "")
+                yt_url = fr.get("youtube_url", "")
                 for det in fr.get("detections", []):
                     rec = dict(det)
+                    rec["frame_id"] = f_id
                     rec["video_id"] = vid
                     rec["frame_idx"] = f_idx
+                    rec["timestamp"] = t_sec
                     rec["timestamp_ms"] = t_ms
                     rec["timestamp_str"] = t_str
+                    rec["youtube_url"] = yt_url
                     rec["frame_start"] = f_idx
                     rec["frame_end"] = f_idx
                     rec["occurrences"] = 1
@@ -154,9 +160,12 @@ class TemporalDeduplicator:
 
         for frame_item in sorted_frames:
             vid = frame_item.get("video_id", "")
+            f_id = frame_item.get("frame_id", "")
             f_idx = frame_item.get("frame_idx", 0)
+            t_sec = frame_item.get("timestamp", 0.0)
             t_ms = frame_item.get("timestamp_ms", 0)
             t_str = frame_item.get("timestamp_str", "")
+            yt_url = frame_item.get("youtube_url", "")
             detections = frame_item.get("detections", [])
 
             # Đóng các track đã quá khoảng cách max_frame_gap
@@ -187,6 +196,9 @@ class TemporalDeduplicator:
 
                         # Cập nhật thông tin đại diện nếu tự tin cao hơn
                         if det.get("confidence", 0.0) > track["confidence"]:
+                            track["best_frame_id"] = f_id
+                            track["best_timestamp"] = t_sec
+                            track["best_youtube_url"] = yt_url
                             track["text"] = det.get("text", track["text"])
                             track["text_unsigned"] = det.get("text_unsigned", track["text_unsigned"])
                             track["confidence"] = det.get("confidence", track["confidence"])
@@ -209,6 +221,9 @@ class TemporalDeduplicator:
                     # Tạo một track mới
                     new_track = {
                         "video_id": vid,
+                        "best_frame_id": f_id,
+                        "best_timestamp": t_sec,
+                        "best_youtube_url": yt_url,
                         "frame_start": f_idx,
                         "frame_end": f_idx,
                         "last_frame_idx": f_idx,
@@ -234,10 +249,13 @@ class TemporalDeduplicator:
         output_records = []
         for track in completed_tracks:
             output_records.append({
+                "frame_id": track.get("best_frame_id", ""),
                 "video_id": track["video_id"],
                 "frame_idx": track["best_frame_idx"],
+                "timestamp": track.get("best_timestamp", 0.0),
                 "timestamp_ms": track["best_timestamp_ms"],
                 "timestamp_str": track["best_timestamp_str"],
+                "youtube_url": track.get("best_youtube_url", ""),
                 "frame_start": track["frame_start"],
                 "frame_end": track["frame_end"],
                 "frame_span": track["frame_end"] - track["frame_start"],
@@ -253,3 +271,4 @@ class TemporalDeduplicator:
         # Sắp xếp output theo frame_start
         output_records.sort(key=lambda x: (x["video_id"], x["frame_start"]))
         return output_records
+

@@ -6,7 +6,10 @@ Description: DBNet++ / PaddleOCR Text Detection wrapper with 4-point polygon ext
 
 import cv2
 import numpy as np
+import logging
 from typing import List, Dict, Any, Tuple, Optional
+
+logger = logging.getLogger("src.ocr.detector")
 
 
 class TextDetector:
@@ -30,6 +33,7 @@ class TextDetector:
         """Khởi tạo model PaddleOCR Detection."""
         try:
             from paddleocr import PaddleOCR
+            use_gpu = (self.device == "cuda" or self.device == "gpu")
             try:
                 # PaddleOCR 3.x
                 self.detector = PaddleOCR(
@@ -39,9 +43,9 @@ class TextDetector:
                     text_det_box_thresh=box_thresh,
                     text_det_unclip_ratio=unclip_ratio
                 )
-            except Exception:
+            except Exception as e3:
+                logger.debug(f"PaddleOCR 3.x init fallback to 2.x API: {e3}")
                 # Legacy PaddleOCR 2.x
-                use_gpu = (self.device == "cuda")
                 self.detector = PaddleOCR(
                     use_angle_cls=use_angle_cls,
                     lang="vi",
@@ -51,7 +55,8 @@ class TextDetector:
                     det_db_unclip_ratio=unclip_ratio,
                     show_log=False
                 )
-        except Exception:
+        except Exception as e:
+            logger.error(f"❌ Không thể khởi tạo PaddleOCR Detector ({self.device}): {e}")
             self.detector = None
 
     def detect(self, image_bgr: np.ndarray) -> List[Dict[str, Any]]:
@@ -69,7 +74,7 @@ class TextDetector:
             try:
                 # PaddleOCR detection
                 results = self.detector.ocr(image_bgr, rec=False, cls=True)
-                if results and len(results) > 0:
+                if results and len(results) > 0 and results[0]:
                     raw_boxes = results[0]
                     for box in raw_boxes:
                         poly = np.array(box, dtype=np.float32)
@@ -92,8 +97,9 @@ class TextDetector:
                             "area": float(area),
                             "crop_img": crop_img
                         })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Lỗi khi thực thi text detection: {e}")
+
 
         return detections
 

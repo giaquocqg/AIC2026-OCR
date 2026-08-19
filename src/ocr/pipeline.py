@@ -23,10 +23,15 @@ from .deduplicator import TemporalDeduplicator
 from .indexer import OCRIndexer, OCRIndexSearcher
 
 
+import logging
+
+logger = logging.getLogger("src.ocr.pipeline")
+
+
 class OCRPipeline:
     """Điều phối toàn bộ quy trình OCR & Text Indexing cho toàn bộ Dataset AIC 2026."""
 
-    def __init__(self, config_input: Union[str, Dict[str, Any]]):
+    def __init__(self, config_input: Union[str, Dict[str, Any]] = "configs/ocr_config.yaml", device: Optional[str] = None):
         if isinstance(config_input, str):
             with open(config_input, 'r', encoding='utf-8') as f:
                 self.config = yaml.safe_load(f)
@@ -34,7 +39,28 @@ class OCRPipeline:
             self.config = config_input
 
         # 1. Device configuration
-        self.device = self.config.get("pipeline", {}).get("device", "cuda")
+        if device:
+            self.device = device
+        else:
+            self.device = self.config.get("pipeline", {}).get("device", "cuda")
+
+        import torch
+        if self.device in ["cuda", "gpu"]:
+            if torch.cuda.is_available():
+                self.device = "cuda"
+                try:
+                    gpu_name = torch.cuda.get_device_name(0)
+                    vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                    print(f"🚀 [OCR Engine] Su dung GPU: {gpu_name} (VRAM: {vram_gb:.1f} GB)")
+                except Exception:
+                    print("🚀 [OCR Engine] Su dung GPU (CUDA)")
+            else:
+                logger.warning("CUDA không khả dụng trên môi trường hiện tại. Tự động chuyển sang CPU.")
+                print("⚠️ [OCR Engine] CUDA không khả dụng trên môi trường hiện tại. Tự động chuyển sang CPU.")
+                self.device = "cpu"
+        else:
+            self.device = "cpu"
+            print("ℹ️ [OCR Engine] Thiết bị tính toán: CPU")
 
         # 2. Initialize Preprocessor & Metadata Mapper
         prep_cfg = self.config.get("preprocessor", {})
@@ -90,6 +116,7 @@ class OCRPipeline:
         storage_cfg = self.config.get("storage", {})
         self.output_dir = storage_cfg.get("output_dir", "data/ocr_results")
         self.indexer = OCRIndexer(output_dir=self.output_dir)
+
 
     def process_single_frame(self, 
                              image_input: Union[str, cv2.Mat], 
@@ -224,15 +251,31 @@ class OCRPipeline:
             index_data: Dict[str, str] = json.load(f)
 
         os.makedirs(self.output_dir, exist_ok=True)
-        checkpoint_path = os.path.join(self.output_dir, ".index_checkpoint.json")
-        completed_videos = set()
+        checkpoint_vids_path = os.path.join(self.output_dir, ".index_checkpoint.json")
+        checkpoint_records_path = os.path.join(self.output_dir, ".ocr_records_checkpoint.jsonl")
 
-        if checkpoint and os.path.exists(checkpoint_path):
+        completed_videos = set()
+        all_dedup_records = []
+
+        if checkpoint and os.path.exists(checkpoint_vids_path):
             try:
-                with open(checkpoint_path, 'r', encoding='utf-8') as f:
+                with open(checkpoint_vids_path, 'r', encoding='utf-8') as f:
                     completed_videos = set(json.load(f))
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Lỗi khi đọc danh sách completed videos từ checkpoint: {e}")
                 completed_videos = set()
+
+            # Nạp lại toàn bộ records đã trích xuất từ các video trước đó
+            if os.path.exists(checkpoint_records_path):
+                try:
+                    with open(checkpoint_records_path, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                all_dedup_records.append(json.loads(line))
+                    print(f"🔄 [Checkpoint] Đã nạp lại {len(all_dedup_records):,} bản ghi từ {len(completed_videos)} video trước.")
+                except Exception as e:
+                    logger.error(f"Lỗi khi đọc file checkpoint records: {e}")
 
         # Nhóm theo video_id
         from collections import defaultdict
@@ -242,11 +285,10 @@ class OCRPipeline:
             vid = parts[0] if len(parts) > 1 else "unknown"
             video_groups[vid].append((fid_str, rel_path))
 
-        all_dedup_records = []
         total_frames = 0
         start_time = time.time()
 
-        print(f"[AIC 2026 OCR Engine] Xu ly {len(index_data):,} keyframes tu {len(video_groups)} video (index.json)")
+        print(f"[AIC 2026 OCR Engine] Xử lý {len(index_data):,} keyframes từ {len(video_groups)} video (index.json)")
 
         with tqdm(total=len(video_groups), desc="Processing Videos (index.json)", unit="video") as pbar:
             for vid, frame_list in sorted(video_groups.items()):
@@ -266,14 +308,21 @@ class OCRPipeline:
                 v_records = self.deduplicator.deduplicate_video_detections(frame_results)
                 all_dedup_records.extend(v_records)
 
-                completed_videos.add(vid)
+                # Lưu gia tăng ngay vào checkpoint JSONL để tránh mất dữ liệu
                 if checkpoint:
-                    with open(checkpoint_path, 'w', encoding='utf-8') as f:
-                        json.dump(list(completed_videos), f, ensure_ascii=False)
+                    completed_videos.add(vid)
+                    try:
+                        with open(checkpoint_records_path, 'a', encoding='utf-8') as f:
+                            for r in v_records:
+                                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+                        with open(checkpoint_vids_path, 'w', encoding='utf-8') as f:
+                            json.dump(list(completed_videos), f, ensure_ascii=False)
+                    except Exception as e:
+                        logger.error(f"Lỗi khi lưu checkpoint cho video {vid}: {e}")
 
                 elapsed = time.time() - start_time
                 fps = total_frames / elapsed if elapsed > 0 else 0
-                pbar.set_postfix_str(f"FPS: {fps:.1f} | Detections: {len(all_dedup_records)}")
+                pbar.set_postfix_str(f"FPS: {fps:.1f} | Detections: {len(all_dedup_records):,}")
                 pbar.update(1)
 
         # Xuất dữ liệu sang các định dạng: Parquet, SQLite FTS5, Backend JSON, Elasticsearch JSONL
@@ -301,13 +350,13 @@ class OCRPipeline:
         }
 
         print("\n" + "=" * 60)
-        print("Hoan thanh Indexing OCR AIC 2026 tu index.json!")
-        print(f"  - Tong so ban ghi OCR: {len(all_dedup_records):,}")
+        print("Hoàn thành Indexing OCR AIC 2026 từ index.json!")
+        print(f"  - Tổng số bản ghi OCR: {len(all_dedup_records):,}")
         print(f"  - File Parquet (Vector Search / Milvus RAG): {parquet_path}")
         print(f"  - File SQLite FTS5 (High-Speed Search): {sqlite_path}")
         print(f"  - File Backend OCR JSON: {backend_json_path}")
         print(f"  - File Elasticsearch Bulk JSONL: {es_bulk_path}")
-        print(f"  - Toc do trung binh: {summary['avg_fps']} FPS")
+        print(f"  - Tốc độ trung bình: {summary['avg_fps']} FPS")
         print("=" * 60)
 
         return summary
@@ -338,25 +387,39 @@ class OCRPipeline:
             self.frame_mapper._load_youtube_map(youtube_urls_file)
 
         os.makedirs(self.output_dir, exist_ok=True)
-        checkpoint_path = os.path.join(self.output_dir, ".checkpoint.json")
-        completed_videos = set()
+        checkpoint_vids_path = os.path.join(self.output_dir, ".checkpoint.json")
+        checkpoint_records_path = os.path.join(self.output_dir, ".ocr_dataset_records_checkpoint.jsonl")
 
-        if checkpoint and os.path.exists(checkpoint_path):
+        completed_videos = set()
+        all_dedup_records = []
+
+        if checkpoint and os.path.exists(checkpoint_vids_path):
             try:
-                with open(checkpoint_path, 'r', encoding='utf-8') as f:
+                with open(checkpoint_vids_path, 'r', encoding='utf-8') as f:
                     completed_videos = set(json.load(f))
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Lỗi khi đọc checkpoint videos: {e}")
                 completed_videos = set()
+
+            if os.path.exists(checkpoint_records_path):
+                try:
+                    with open(checkpoint_records_path, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                all_dedup_records.append(json.loads(line))
+                    print(f"🔄 [Checkpoint] Đã nạp lại {len(all_dedup_records):,} bản ghi từ {len(completed_videos)} video trước.")
+                except Exception as e:
+                    logger.error(f"Lỗi khi nạp checkpoint dataset records: {e}")
 
         # Tìm tất cả thư mục con (mỗi thư mục tương ứng 1 video)
         video_dirs = [d for d in glob.glob(os.path.join(keyframes_root, "*")) if os.path.isdir(d)]
         video_dirs.sort()
 
-        all_dedup_records = []
         total_frames = 0
         start_time = time.time()
 
-        print(f"[AIC 2026 OCR Engine] Bat dau xu ly {len(video_dirs)} video tu: {keyframes_root}")
+        print(f"[AIC 2026 OCR Engine] Bắt đầu xử lý {len(video_dirs)} video từ: {keyframes_root}")
 
         with tqdm(total=len(video_dirs), desc="Processing Videos", unit="video") as pbar:
             for vdir in video_dirs:
@@ -375,15 +438,20 @@ class OCRPipeline:
                     img_set.update(glob.glob(os.path.join(vdir, p)))
                 total_frames += len(img_set)
 
-
-                completed_videos.add(vid)
                 if checkpoint:
-                    with open(checkpoint_path, 'w', encoding='utf-8') as f:
-                        json.dump(list(completed_videos), f, ensure_ascii=False)
+                    completed_videos.add(vid)
+                    try:
+                        with open(checkpoint_records_path, 'a', encoding='utf-8') as f:
+                            for r in v_records:
+                                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+                        with open(checkpoint_vids_path, 'w', encoding='utf-8') as f:
+                            json.dump(list(completed_videos), f, ensure_ascii=False)
+                    except Exception as e:
+                        logger.error(f"Lỗi khi lưu checkpoint cho video {vid}: {e}")
 
                 elapsed = time.time() - start_time
                 fps = total_frames / elapsed if elapsed > 0 else 0
-                pbar.set_postfix_str(f"FPS: {fps:.1f} | Detections: {len(all_dedup_records)}")
+                pbar.set_postfix_str(f"FPS: {fps:.1f} | Detections: {len(all_dedup_records):,}")
                 pbar.update(1)
 
         # Xuất dữ liệu sang Parquet, SQLite FTS5, Backend JSON, Elasticsearch JSONL
@@ -411,14 +479,15 @@ class OCRPipeline:
         }
 
         print("\n" + "=" * 60)
-        print("Hoan thanh Indexing OCR AI Challenge 2026!")
-        print(f"  - Tong so ban ghi OCR: {len(all_dedup_records):,}")
+        print("Hoàn thành Indexing OCR AI Challenge 2026!")
+        print(f"  - Tổng số bản ghi OCR: {len(all_dedup_records):,}")
         print(f"  - File Parquet (Vector Search / RAG): {parquet_path}")
         print(f"  - File SQLite FTS5 (High-Speed Search): {sqlite_path}")
         print(f"  - File Backend OCR JSON: {backend_json_path}")
         print(f"  - File Elasticsearch Bulk JSONL: {es_bulk_path}")
-        print(f"  - Toc do trung binh: {summary['avg_fps']} FPS")
+        print(f"  - Tốc độ trung bình: {summary['avg_fps']} FPS")
         print("=" * 60)
 
         return summary
+
 

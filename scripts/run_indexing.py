@@ -55,11 +55,8 @@ def main():
     print(f"💾 Output Dir:     {args.output_dir}")
     print("=" * 65)
 
-    pipeline = OCRPipeline(config_input=args.config)
-    if args.device:
-        pipeline.device = args.device
-        pipeline.detector.device = args.device
-        pipeline.recognizer.device = args.device
+    pipeline = OCRPipeline(config_input=args.config, device=args.device)
+
 
     if args.index_json and os.path.exists(args.index_json):
         summary = pipeline.process_from_index_json(

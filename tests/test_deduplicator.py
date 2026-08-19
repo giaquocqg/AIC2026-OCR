@@ -25,10 +25,13 @@ class TestTemporalDeduplicator(unittest.TestCase):
         # 5 keyframes liên tiếp chứa cùng 1 biển hiệu quán cơm
         frame_records = [
             {
+                "frame_id": "100",
                 "video_id": "L01_V001",
                 "frame_idx": 100,
+                "timestamp": 4.0,
                 "timestamp_ms": 4000,
                 "timestamp_str": "00:04.000",
+                "youtube_url": "https://youtube.com/watch?v=TEST&t=4s",
                 "detections": [{
                     "text": "CƠM TẤM BA GHIỀN",
                     "text_unsigned": "com tam ba ghien",
@@ -39,10 +42,13 @@ class TestTemporalDeduplicator(unittest.TestCase):
                 }]
             },
             {
+                "frame_id": "105",
                 "video_id": "L01_V001",
                 "frame_idx": 105,
+                "timestamp": 4.2,
                 "timestamp_ms": 4200,
                 "timestamp_str": "00:04.200",
+                "youtube_url": "https://youtube.com/watch?v=TEST&t=4s",
                 "detections": [{
                     "text": "CƠM TẤM BA GHIỀN",
                     "text_unsigned": "com tam ba ghien",
@@ -53,10 +59,13 @@ class TestTemporalDeduplicator(unittest.TestCase):
                 }]
             },
             {
+                "frame_id": "110",
                 "video_id": "L01_V001",
                 "frame_idx": 110,
+                "timestamp": 4.4,
                 "timestamp_ms": 4400,
                 "timestamp_str": "00:04.400",
+                "youtube_url": "https://youtube.com/watch?v=TEST&t=4s",
                 "detections": [{
                     "text": "COM TAM BA GHIEN",
                     "text_unsigned": "com tam ba ghien",
@@ -71,13 +80,17 @@ class TestTemporalDeduplicator(unittest.TestCase):
         merged = self.dedup.deduplicate_video_detections(frame_records)
         self.assertEqual(len(merged), 1, "Should merge 3 consecutive detections into 1 temporal record")
         rec = merged[0]
+        self.assertEqual(rec["frame_id"], "105", "Should preserve frame_id of highest confidence frame")
         self.assertEqual(rec["video_id"], "L01_V001")
         self.assertEqual(rec["frame_start"], 100)
         self.assertEqual(rec["frame_end"], 110)
         self.assertEqual(rec["frame_idx"], 105, "Representative frame should be frame 105 with highest confidence")
+        self.assertEqual(rec["timestamp"], 4.2)
+        self.assertEqual(rec["youtube_url"], "https://youtube.com/watch?v=TEST&t=4s")
         self.assertEqual(rec["confidence"], 0.96)
         self.assertEqual(rec["occurrences"], 3)
 
 
 if __name__ == "__main__":
     unittest.main()
+

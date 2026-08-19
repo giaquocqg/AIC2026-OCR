@@ -7,7 +7,10 @@ Description: Batch Text Recognition combining VietOCR (Transformer) for Vietname
 import cv2
 import numpy as np
 from PIL import Image
+import logging
 from typing import List, Dict, Any, Tuple, Optional
+
+logger = logging.getLogger("src.ocr.recognizer")
 
 
 class BatchTextRecognizer:
@@ -33,7 +36,9 @@ class BatchTextRecognizer:
 
     def _init_models(self):
         """Khởi tạo VietOCR và PaddleOCR Recognizer."""
-        # 1. Khởi tạo PaddleOCR
+        use_gpu = (self.device == "cuda" or self.device == "gpu")
+
+        # 1. Khởi tạo PaddleOCR Recognizer
         try:
             from paddleocr import PaddleOCR
             try:
@@ -41,27 +46,34 @@ class BatchTextRecognizer:
                     use_textline_orientation=False,
                     lang=self.paddle_lang
                 )
-            except Exception:
-                use_gpu = (self.device == "cuda")
+            except Exception as e3:
+                logger.debug(f"PaddleOCR 3.x rec fallback to 2.x API: {e3}")
                 self.paddle_rec = PaddleOCR(
                     use_angle_cls=False,
                     lang=self.paddle_lang,
                     use_gpu=use_gpu,
                     show_log=False
                 )
-        except Exception:
+            logger.info("✓ PaddleOCR Text Recognizer initialized successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ Không thể khởi tạo PaddleOCR Recognizer ({self.device}): {e}")
             self.paddle_rec = None
 
-        # 2. Khởi tạo VietOCR
+        # 2. Khởi tạo VietOCR Predictor
         try:
             from vietocr.tool.config import Cfg
             from vietocr.tool.predictor import Predictor
             config = Cfg.load_config_from_name(self.vietocr_model_name)
-            config['device'] = self.device if self.device == 'cuda' else 'cpu'
+            config['device'] = 'cuda:0' if use_gpu else 'cpu'
             config['predictor']['beamsearch'] = False
             self.vietocr_detector = Predictor(config)
-        except Exception:
+            logger.info(f"✓ VietOCR ({self.vietocr_model_name}) initialized successfully on {config['device']}")
+        except Exception as e:
+            logger.warning(f"⚠️ Không thể khởi tạo VietOCR ({self.vietocr_model_name}) on {self.device}: {e}")
             self.vietocr_detector = None
+
+        if self.paddle_rec is None and self.vietocr_detector is None:
+            logger.error("❌ CẢNH BÁO NGHIÊM TRỌNG: Cả PaddleOCR và VietOCR đều không khởi tạo được!")
 
     def recognize_single(self, crop_bgr: np.ndarray) -> Tuple[str, float]:
         """Nhận diện 1 ảnh crop."""
@@ -75,18 +87,19 @@ class BatchTextRecognizer:
                 if res and len(res) > 0 and res[0] and len(res[0]) > 0:
                     text, conf = res[0][0]
                     return str(text), float(conf)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"PaddleOCR recognize_single failed: {e}")
 
         if self.vietocr_detector is not None:
             try:
                 pil_img = Image.fromarray(cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB))
                 text, prob = self.vietocr_detector.predict(pil_img, return_prob=True)
                 return str(text), float(prob)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"VietOCR recognize_single failed: {e}")
 
         return "", 0.0
+
 
     def recognize_batch(self, crop_images: List[np.ndarray]) -> List[Tuple[str, float]]:
         """
