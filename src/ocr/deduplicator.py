@@ -19,12 +19,13 @@ class TemporalDeduplicator:
     def __init__(self, 
                  enable_temporal_merge: bool = True,
                  similarity_threshold: float = 0.82,
-                 max_frame_gap: int = 15,
+                 max_frame_gap: int = 120,
                  iou_threshold: float = 0.25):
         self.enable = enable_temporal_merge
         self.similarity_threshold = similarity_threshold
         self.max_frame_gap = max_frame_gap
         self.iou_threshold = iou_threshold
+
 
     @staticmethod
     def compute_text_similarity(text1: str, text2: str) -> float:

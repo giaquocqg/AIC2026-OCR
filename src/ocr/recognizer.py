@@ -75,35 +75,84 @@ class BatchTextRecognizer:
         if self.paddle_rec is None and self.vietocr_detector is None:
             logger.error("❌ CẢNH BÁO NGHIÊM TRỌNG: Cả PaddleOCR và VietOCR đều không khởi tạo được!")
 
+    @staticmethod
+    def count_vietnamese_diacritics(text: str) -> int:
+        """Đếm số lượng nguyên âm có dấu tiếng Việt trong chuỗi."""
+        vn_chars = "àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
+        return sum(1 for c in text.lower() if c in vn_chars)
+
     def recognize_single(self, crop_bgr: np.ndarray) -> Tuple[str, float]:
-        """Nhận diện 1 ảnh crop."""
+        """
+        Nhận diện 1 ảnh crop theo chiến lược Hybrid thực sự:
+        - VietOCR Transformer: Ưu việt cho tiếng Việt có dấu, chữ viết trên biển hiệu dài.
+        - PaddleOCR: Ưu việt cho chữ số, mã hiệu, biển số xe, ký tự tiếng Anh.
+        - Chọn kết quả có độ tự tin cao nhất và độ chính xác dấu tiếng Việt tốt nhất.
+        """
         if crop_bgr is None or crop_bgr.size == 0:
             return "", 0.0
 
-        # Ưu tiên PaddleOCR hoặc VietOCR
+        paddle_text, paddle_conf = "", 0.0
+        vietocr_text, vietocr_conf = "", 0.0
+
+        # 1. Chạy PaddleOCR
         if self.paddle_rec is not None:
             try:
                 res = self.paddle_rec.ocr(crop_bgr, det=False, cls=False)
                 if res and len(res) > 0 and res[0] and len(res[0]) > 0:
-                    text, conf = res[0][0]
-                    return str(text), float(conf)
-            except Exception as e:
-                logger.debug(f"PaddleOCR recognize_single failed: {e}")
+                    paddle_text = str(res[0][0][0]).strip()
+                    paddle_conf = float(res[0][0][1])
+            except (TypeError, Exception) as e:
+                try:
+                    predict_res = self.paddle_rec.predict(crop_bgr)
+                    for p in predict_res:
+                        if hasattr(p, 'get') and 'rec_text' in p:
+                            paddle_text = str(p['rec_text']).strip()
+                            paddle_conf = float(p.get('rec_score', 0.85))
+                            break
+                except Exception as e2:
+                    logger.debug(f"PaddleOCR fallback predict failed: {e2}")
 
+        # 2. Chạy VietOCR
         if self.vietocr_detector is not None:
             try:
                 pil_img = Image.fromarray(cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB))
-                text, prob = self.vietocr_detector.predict(pil_img, return_prob=True)
-                return str(text), float(prob)
+                v_text, v_prob = self.vietocr_detector.predict(pil_img, return_prob=True)
+                vietocr_text = str(v_text).strip()
+                vietocr_conf = float(v_prob)
             except Exception as e:
-                logger.debug(f"VietOCR recognize_single failed: {e}")
+                logger.debug(f"VietOCR recognize failed: {e}")
 
-        return "", 0.0
+        # 3. Chiến lược Hybrid Voting / Scoring
+        if paddle_text and not vietocr_text:
+            return paddle_text, paddle_conf
+        if vietocr_text and not paddle_text:
+            return vietocr_text, vietocr_conf
+        if not paddle_text and not vietocr_text:
+            return "", 0.0
 
+        # Nếu cả 2 đều có kết quả:
+        vn_vietocr = self.count_vietnamese_diacritics(vietocr_text)
+        vn_paddle = self.count_vietnamese_diacritics(paddle_text)
+
+        # Nếu VietOCR phát hiện có dấu tiếng Việt chuẩn và confidence khá (>= 0.65)
+        if vn_vietocr > 0 and vn_vietocr >= vn_paddle and vietocr_conf >= 0.65:
+            return vietocr_text, vietocr_conf
+
+        # Nếu là chuỗi số thuần hoặc mã ký hiệu (biển số xe, số nhà, v.v.)
+        if paddle_text.replace(" ", "").isalnum() and vn_vietocr == 0:
+            if paddle_conf >= vietocr_conf - 0.10:
+                return paddle_text, paddle_conf
+
+        # Trường hợp chung: Chọn theo confidence cao hơn
+        if vietocr_conf >= paddle_conf:
+            return vietocr_text, vietocr_conf
+        else:
+            return paddle_text, paddle_conf
 
     def recognize_batch(self, crop_images: List[np.ndarray]) -> List[Tuple[str, float]]:
         """
-        Nhận diện một danh sách lớn các ảnh crop theo từng batch GPU.
+        Nhận diện một danh sách lớn các ảnh crop theo từng batch GPU/CPU.
+        Hỗ trợ tăng tốc xử lý theo lô ảnh.
         """
         if not crop_images:
             return []
@@ -112,8 +161,21 @@ class BatchTextRecognizer:
         # Xử lý theo từng batch_size
         for i in range(0, len(crop_images), self.batch_size):
             batch = crop_images[i:i + self.batch_size]
+
+            # Kiểm tra nếu VietOCR có hỗ trợ predict_batch
+            if self.vietocr_detector is not None and hasattr(self.vietocr_detector, "predict_batch") and self.paddle_rec is None:
+                try:
+                    pil_batch = [Image.fromarray(cv2.cvtColor(c, cv2.COLOR_BGR2RGB)) for c in batch if c is not None and c.size > 0]
+                    v_res = self.vietocr_detector.predict_batch(pil_batch, return_prob=True)
+                    for text, prob in v_res:
+                        results.append((str(text), float(prob)))
+                    continue
+                except Exception as e:
+                    logger.debug(f"VietOCR predict_batch fallback to single: {e}")
+
             for crop in batch:
                 text, conf = self.recognize_single(crop)
                 results.append((text, conf))
 
         return results
+

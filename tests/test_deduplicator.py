@@ -90,7 +90,55 @@ class TestTemporalDeduplicator(unittest.TestCase):
         self.assertEqual(rec["confidence"], 0.96)
         self.assertEqual(rec["occurrences"], 3)
 
+    def test_deduplicate_with_75_frame_gap(self):
+        # AIC2026 keyframe bước nhảy 75 frame: keyframe_0 và keyframe_75
+        dedup_75 = TemporalDeduplicator(enable_temporal_merge=True, max_frame_gap=120)
+        frame_records = [
+            {
+                "frame_id": "0",
+                "video_id": "L21_V001",
+                "frame_idx": 0,
+                "timestamp": 0.0,
+                "timestamp_ms": 0,
+                "timestamp_str": "00:00.000",
+                "youtube_url": "https://youtube.com/watch?v=TEST",
+                "detections": [{
+                    "text": "QUÁN ĂN BÌNH DÂN",
+                    "text_unsigned": "quan an binh dan",
+                    "confidence": 0.89,
+                    "bbox_norm": [0.1, 0.2, 0.3, 0.8],
+                    "polygon": [],
+                    "entities": []
+                }]
+            },
+            {
+                "frame_id": "75",
+                "video_id": "L21_V001",
+                "frame_idx": 75,
+                "timestamp": 3.0,
+                "timestamp_ms": 3000,
+                "timestamp_str": "00:03.000",
+                "youtube_url": "https://youtube.com/watch?v=TEST",
+                "detections": [{
+                    "text": "QUÁN ĂN BÌNH DÂN",
+                    "text_unsigned": "quan an binh dan",
+                    "confidence": 0.95,
+                    "bbox_norm": [0.1, 0.2, 0.3, 0.8],
+                    "polygon": [],
+                    "entities": []
+                }]
+            }
+        ]
+
+        merged = dedup_75.deduplicate_video_detections(frame_records)
+        self.assertEqual(len(merged), 1, "Should merge keyframes separated by 75 frames when max_frame_gap=120")
+        self.assertEqual(merged[0]["frame_id"], "75")
+        self.assertEqual(merged[0]["frame_start"], 0)
+        self.assertEqual(merged[0]["frame_end"], 75)
+        self.assertEqual(merged[0]["occurrences"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

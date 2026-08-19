@@ -25,6 +25,7 @@ detector:
 
 recognizer:
   engine: "hybrid"               # 'hybrid' (VietOCR for Vietnamese scene text + Paddle for digits/code)
+  hybrid_strategy: "confidence_weighted" # 'confidence_weighted' or 'waterfall'
   vietocr_model: "vgg_transformer" # 'vgg_transformer' or 'vgg_seq2seq'
   paddle_rec_lang: "vi"          # 'vi' or 'latin' / 'en'
   batch_size: 64                 # GPU Batch Size for Recognition
@@ -39,7 +40,8 @@ postprocessor:
 deduplicator:
   enable_temporal_merge: true    # Deduplicate redundant text across adjacent keyframes
   similarity_threshold: 0.85     # Levenshtein similarity to merge
-  max_frame_gap: 15              # Max keyframe distance to consider for merging
+  max_frame_gap: 120             # Max keyframe distance to consider for merging (AIC2026 keyframe step is 75)
+
 
 metadata:
   fps_file: "AIC2026/data/metadata/fps.json"

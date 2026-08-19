@@ -51,16 +51,18 @@ class OCRPipeline:
                 try:
                     gpu_name = torch.cuda.get_device_name(0)
                     vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                    print(f"🚀 [OCR Engine] Su dung GPU: {gpu_name} (VRAM: {vram_gb:.1f} GB)")
+                    logger.info(f"[OCR Engine] Su dung GPU: {gpu_name} (VRAM: {vram_gb:.1f} GB)")
+                    print(f"[OCR Engine] Su dung GPU: {gpu_name} (VRAM: {vram_gb:.1f} GB)")
                 except Exception:
-                    print("🚀 [OCR Engine] Su dung GPU (CUDA)")
+                    print("[OCR Engine] Su dung GPU (CUDA)")
             else:
-                logger.warning("CUDA không khả dụng trên môi trường hiện tại. Tự động chuyển sang CPU.")
-                print("⚠️ [OCR Engine] CUDA không khả dụng trên môi trường hiện tại. Tự động chuyển sang CPU.")
+                logger.warning("CUDA khong kha dung tren moi truong hien tai. Tu dong chuyen sang CPU.")
+                print("[OCR Engine] CUDA khong kha dung tren moi truong hien tai. Tu dong chuyen sang CPU.")
                 self.device = "cpu"
         else:
             self.device = "cpu"
-            print("ℹ️ [OCR Engine] Thiết bị tính toán: CPU")
+            print("[OCR Engine] Thiet bi tinh toan: CPU")
+
 
         # 2. Initialize Preprocessor & Metadata Mapper
         prep_cfg = self.config.get("preprocessor", {})
@@ -273,9 +275,10 @@ class OCRPipeline:
                             line = line.strip()
                             if line:
                                 all_dedup_records.append(json.loads(line))
-                    print(f"🔄 [Checkpoint] Đã nạp lại {len(all_dedup_records):,} bản ghi từ {len(completed_videos)} video trước.")
+                    print(f"[Checkpoint] Da nap lai {len(all_dedup_records):,} ban ghi tu {len(completed_videos)} video truoc.")
                 except Exception as e:
                     logger.error(f"Lỗi khi đọc file checkpoint records: {e}")
+
 
         # Nhóm theo video_id
         from collections import defaultdict
@@ -288,7 +291,7 @@ class OCRPipeline:
         total_frames = 0
         start_time = time.time()
 
-        print(f"[AIC 2026 OCR Engine] Xử lý {len(index_data):,} keyframes từ {len(video_groups)} video (index.json)")
+        print(f"[AIC 2026 OCR Engine] Xu ly {len(index_data):,} keyframes tu {len(video_groups)} video (index.json)")
 
         with tqdm(total=len(video_groups), desc="Processing Videos (index.json)", unit="video") as pbar:
             for vid, frame_list in sorted(video_groups.items()):
@@ -350,14 +353,15 @@ class OCRPipeline:
         }
 
         print("\n" + "=" * 60)
-        print("Hoàn thành Indexing OCR AIC 2026 từ index.json!")
-        print(f"  - Tổng số bản ghi OCR: {len(all_dedup_records):,}")
+        print("Hoan thanh Indexing OCR AIC 2026 tu index.json!")
+        print(f"  - Tong so ban ghi OCR: {len(all_dedup_records):,}")
         print(f"  - File Parquet (Vector Search / Milvus RAG): {parquet_path}")
         print(f"  - File SQLite FTS5 (High-Speed Search): {sqlite_path}")
         print(f"  - File Backend OCR JSON: {backend_json_path}")
         print(f"  - File Elasticsearch Bulk JSONL: {es_bulk_path}")
-        print(f"  - Tốc độ trung bình: {summary['avg_fps']} FPS")
+        print(f"  - Toc do trung binh: {summary['avg_fps']} FPS")
         print("=" * 60)
+
 
         return summary
 
@@ -408,9 +412,10 @@ class OCRPipeline:
                             line = line.strip()
                             if line:
                                 all_dedup_records.append(json.loads(line))
-                    print(f"🔄 [Checkpoint] Đã nạp lại {len(all_dedup_records):,} bản ghi từ {len(completed_videos)} video trước.")
+                    print(f"[Checkpoint] Da nap lai {len(all_dedup_records):,} ban ghi tu {len(completed_videos)} video truoc.")
                 except Exception as e:
                     logger.error(f"Lỗi khi nạp checkpoint dataset records: {e}")
+
 
         # Tìm tất cả thư mục con (mỗi thư mục tương ứng 1 video)
         video_dirs = [d for d in glob.glob(os.path.join(keyframes_root, "*")) if os.path.isdir(d)]
@@ -419,7 +424,7 @@ class OCRPipeline:
         total_frames = 0
         start_time = time.time()
 
-        print(f"[AIC 2026 OCR Engine] Bắt đầu xử lý {len(video_dirs)} video từ: {keyframes_root}")
+        print(f"[AIC 2026 OCR Engine] Bat dau xu ly {len(video_dirs)} video tu: {keyframes_root}")
 
         with tqdm(total=len(video_dirs), desc="Processing Videos", unit="video") as pbar:
             for vdir in video_dirs:
@@ -479,15 +484,16 @@ class OCRPipeline:
         }
 
         print("\n" + "=" * 60)
-        print("Hoàn thành Indexing OCR AI Challenge 2026!")
-        print(f"  - Tổng số bản ghi OCR: {len(all_dedup_records):,}")
+        print("Hoan thanh Indexing OCR AI Challenge 2026!")
+        print(f"  - Tong so ban ghi OCR: {len(all_dedup_records):,}")
         print(f"  - File Parquet (Vector Search / RAG): {parquet_path}")
         print(f"  - File SQLite FTS5 (High-Speed Search): {sqlite_path}")
         print(f"  - File Backend OCR JSON: {backend_json_path}")
         print(f"  - File Elasticsearch Bulk JSONL: {es_bulk_path}")
-        print(f"  - Tốc độ trung bình: {summary['avg_fps']} FPS")
+        print(f"  - Toc do trung binh: {summary['avg_fps']} FPS")
         print("=" * 60)
 
         return summary
+
 
 
