@@ -83,16 +83,22 @@ async def api_search(
 ):
     searcher = get_searcher()
     if not searcher:
-        raise HTTPException(status_code=500, detail="Searcher not initialized. No OCR records found.")
+        raise HTTPException(status_code=500, detail="Searcher not initialized. No OCR database found.")
     
-    results = searcher.search(
-        query=q,
-        top_k=top_k,
-        video_filter=video if video else None,
-        entity_type=entity if entity and entity != "ALL" else None,
-        min_confidence=min_conf
-    )
-    return JSONResponse(content={"query": q, "total": len(results), "results": results})
+    try:
+        results = searcher.search(
+            query=q,
+            top_k=top_k,
+            video_filter=video if video else None,
+            entity_type=entity if entity and entity != "ALL" else None,
+            min_confidence=min_conf
+        )
+        return JSONResponse(content={"query": q, "total": len(results), "results": results})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Search error: {e}")
+
 
 
 
