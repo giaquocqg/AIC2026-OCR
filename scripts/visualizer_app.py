@@ -40,37 +40,56 @@ VIDEO_FRAME_TO_PATH: Dict[tuple, str] = {}
 
 
 def get_searcher():
-    global SEARCHER
+    global SEARCHER, DB_PATH
     if SEARCHER:
         return SEARCHER
     
-    # 1. Thử load file DB
-    if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 1024:
-        try:
-            SEARCHER = OCRIndexSearcher(DB_PATH)
-            return SEARCHER
-        except Exception:
-            pass
+    # Tìm file DB ở cwd hoặc project root
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidate_paths = [
+        DB_PATH,
+        os.path.join(project_root, DB_PATH),
+        os.path.join(project_root, "data/ocr_results/ocr_fts.db"),
+        "/home/quoc/AIC2026-OCR/data/ocr_results/ocr_fts.db"
+    ]
+    
+    for p in candidate_paths:
+        if os.path.exists(p) and os.path.getsize(p) > 1024:
+            try:
+                SEARCHER = OCRIndexSearcher(p)
+                DB_PATH = p
+                print(f"✅ Loaded searcher with DB: {p}")
+                return SEARCHER
+            except Exception as e:
+                print(f"Error opening DB {p}: {e}")
 
     # 2. Nếu DB chưa build xong, nạp trực tiếp từ .ocr_records_checkpoint.jsonl
-    checkpoint_jsonl = os.path.join(os.path.dirname(DB_PATH), ".ocr_records_checkpoint.jsonl")
-    if os.path.exists(checkpoint_jsonl):
-        try:
-            records = []
-            with open(checkpoint_jsonl, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if line.strip():
-                        records.append(json.loads(line))
-            if records:
-                from src.ocr.indexer import OCRIndexer
-                indexer = OCRIndexer(output_dir=os.path.dirname(DB_PATH))
-                db_path = indexer.build_sqlite_fts5(records, db_filename=os.path.basename(DB_PATH))
-                SEARCHER = OCRIndexSearcher(db_path)
-                return SEARCHER
-        except Exception as e:
-            print(f"Error loading checkpoint records: {e}")
+    checkpoint_candidates = [
+        os.path.join(os.path.dirname(DB_PATH), ".ocr_records_checkpoint.jsonl"),
+        os.path.join(project_root, "data/ocr_results/.ocr_records_checkpoint.jsonl"),
+        "/home/quoc/AIC2026-OCR/data/ocr_results/.ocr_records_checkpoint.jsonl"
+    ]
+    for cp in checkpoint_candidates:
+        if os.path.exists(cp):
+            try:
+                records = []
+                with open(cp, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            records.append(json.loads(line))
+                if records:
+                    from src.ocr.indexer import OCRIndexer
+                    out_dir = os.path.dirname(cp)
+                    indexer = OCRIndexer(output_dir=out_dir)
+                    db_path = indexer.build_sqlite_fts5(records, db_filename="ocr_fts.db")
+                    SEARCHER = OCRIndexSearcher(db_path)
+                    DB_PATH = db_path
+                    return SEARCHER
+            except Exception as e:
+                print(f"Error loading checkpoint records: {e}")
 
     return None
+
 
 
 @app.get("/api/search")
