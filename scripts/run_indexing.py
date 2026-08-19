@@ -28,8 +28,9 @@ def main():
     parser.add_argument("--fps_file", type=str, default=None, help="Đường dẫn đến file fps.json tập trung")
     parser.add_argument("--youtube_urls", type=str, default=None, help="Đường dẫn đến file Youtube_URL.json")
     parser.add_argument("--metadata_dir", type=str, default=None, help="Đường dẫn đến thư mục chứa các file metadata JSON (Lxx_Vxxx.json)")
-    parser.add_argument("--config", type=str, default="configs/ocr_config.yaml", help="Đường dẫn đến file cấu hình YAML")
     parser.add_argument("--output_dir", type=str, default="data/ocr_results", help="Thư mục xuất kết quả (.parquet, .db, ocr.json)")
+    parser.add_argument("--run_name", type=str, default=None, help="Tên phiên bản / Tag lần chạy (ví dụ: 'v1_gpu', 'run_quoc', 'prod_20260820') để tách biệt folder")
+    parser.add_argument("--auto_timestamp", action="store_true", help="Tự động gắn timestamp YYYYMMDD_HHMMSS vào tên thư mục để không bao giờ bị ghi đè")
     parser.add_argument("--device", type=str, default=None, help="Thiết bị tính toán: 'cuda' hoặc 'cpu'")
     parser.add_argument("--no_checkpoint", action="store_true", help="Vô hiệu hóa tính năng checkpoint")
 
@@ -38,6 +39,18 @@ def main():
     if not os.path.exists(args.keyframes_dir):
         print(f"❌ Lỗi: Thư mục keyframes không tồn tại: {args.keyframes_dir}")
         sys.exit(1)
+
+    # Xử lý versioning / đặt tên thư mục kết quả riêng biệt
+    import datetime
+    output_dir = args.output_dir
+    if args.run_name:
+        output_dir = os.path.join(output_dir, args.run_name)
+    elif args.auto_timestamp:
+        timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = f"{output_dir}_{timestamp_str}"
+    
+    os.makedirs(output_dir, exist_ok=True)
+
 
     print("=" * 65)
     print("      AI CHALLENGE TP.HCM 2026 - OCR RETRIEVAL ENGINE")
