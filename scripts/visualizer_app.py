@@ -533,7 +533,11 @@ async def index_page():
             <!-- Metrics bar -->
             <div class="metrics-bar">
                 <span id="resultsCount">Nhập từ khóa để bắt đầu tìm kiếm trong CSDL...</span>
-                <button class="btn-copy-all" onclick="copyTopKISPayload()">📋 Copy Top 100 KIS Payload</button>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn-copy-all" onclick="copyTopKISPayload()">📋 Copy KIS</button>
+                    <button class="btn-copy-all" style="background: rgba(34, 197, 94, 0.15); color: #86EFAC; border-color: rgba(34, 197, 94, 0.3);" onclick="downloadCSV('kis')">📥 CSV KIS</button>
+                    <button class="btn-copy-all" style="background: rgba(168, 85, 247, 0.15); color: #D8B4FE; border-color: rgba(168, 85, 247, 0.3);" onclick="downloadCSV('qa')">📥 CSV Q&A</button>
+                </div>
             </div>
 
             <!-- Results Grid -->
@@ -569,7 +573,7 @@ async def index_page():
                 grid.innerHTML = "";
 
                 try {
-                    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&entity=${currentEntity}&top_k=60`);
+                    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&entity=${currentEntity}&top_k=100`);
                     const data = await res.json();
                     currentResults = data.results || [];
 
@@ -650,11 +654,48 @@ async def index_page():
                     showToast("Chưa có kết quả để copy!");
                     return;
                 }
-                const lines = currentResults.map(r => r.submission_kis).join('\n');
+                const lines = currentResults.slice(0, 100).map(r => r.submission_kis).join('\n');
                 navigator.clipboard.writeText(lines).then(() => {
-                    showToast(`Đã copy toàn bộ ${currentResults.length} dòng KIS payload!`);
+                    showToast(`Đã copy toàn bộ ${Math.min(currentResults.length, 100)} dòng KIS payload!`);
                 });
             }
+
+            function downloadCSV(type) {
+                if (!currentResults || currentResults.length === 0) {
+                    showToast("Chưa có kết quả để tải CSV!");
+                    return;
+                }
+                const q = document.getElementById('queryInput').value.trim() || 'query';
+                const rows = currentResults.slice(0, 100);
+                let csvContent = "";
+
+                if (type === 'qa') {
+                    csvContent = rows.map(r => {
+                        let ans = "";
+                        if (r.entities && r.entities.length > 0) {
+                            ans = r.entities[0].value || "";
+                        }
+                        if (!ans) ans = r.text.substring(0, 30);
+                        ans = ans.substring(0, 100).replace(/"/g, '""');
+                        return `${r.video_id},${r.frame_idx},"${ans}"`;
+                    }).join('\n');
+                } else {
+                    // Textual KIS
+                    csvContent = rows.map(r => `${r.video_id},${r.frame_idx}`).join('\n');
+                }
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `query-${type}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast(`Đã tải file query-${type}.csv chuẩn BTC!`);
+            }
+
 
             function showToast(msg) {
                 const t = document.getElementById('toast');

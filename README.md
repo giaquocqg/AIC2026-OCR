@@ -225,13 +225,45 @@ schemas = SpatialOCRTool.get_tool_schemas()
 
 ---
 
-## 5. Quy định Định dạng Nộp bài của BTC (Cheat Sheet)
+---
 
-| Loại Truy vấn | Định dạng Chuỗi Nộp Bài | Ví dụ Minh Họa |
-| :--- | :--- | :--- |
-| **1. Textual KIS** | `<video_id>, <frame_id>` | `L01_V001, 150` |
-| **2. Visual Q&A** | `<video_id>, <frame_id>, <answer>` | `L01_V001, 150, 45k` hoặc `L05_V005, 888, màu xanh` |
-| **3. TRAKE** | `<video_id>, <frame_id1>, <frame_id2>, ...` | `L10_V010, 101, 150, 203, 251` |
+### Bước 7: Tự động Đóng gói File Nộp bài Chuẩn BTC (`package_submission.py`)
+
+Theo quy chế cổng thi **`sotuyenaic.oj.io.vn`**, kết quả nộp phải là một file `.zip` chứa bên trong duy nhất thư mục **`submission/`** gồm các file `.csv` cho từng câu truy vấn.
+
+Chạy lệnh tự động hóa toàn bộ quá trình truy vấn và đóng gói:
+```powershell
+# Đọc các file query .txt do BTC phát hành và đóng gói ZIP nộp bài
+.venv\Scripts\python scripts/package_submission.py `
+    --queries_dir "data/round1_queries" `
+    --db "data/ocr_results/ocr_fts.db" `
+    --output_zip "team_submission_round1.zip"
+```
+
+---
+
+## 5. Quy chế & Quy chuẩn Định dạng Nộp bài (`sotuyenaic.oj.io.vn`)
+
+### 📋 Format Chuỗi trong File CSV:
+| Loại Truy vấn | Format Dòng CSV | Quy định Chi tiết | Ví dụ Chuẩn |
+| :--- | :--- | :--- | :--- |
+| **1. Textual KIS** | `<video_id>, <frame_idx>` | Tên video **KHÔNG CÓ** đuôi `.mp4`. Frame là số nguyên. | `L01_V028, 25300` |
+| **2. Visual Q&A** | `<video_id>, <frame_idx>, <answer>` | Answer tối đa **100 ký tự**. Nếu có dấu phẩy/ngoặc kép thì bao quanh bằng `""`. | `L01_V028, 3450, "Có 3 người, bao gồm nam và nữ"` |
+| **3. TRAKE** | `<video_id>, <frame_1>, <frame_2>, ..., <frame_N>` | Số lượng frame ID khớp đúng số events $N$, xếp tăng dần theo thời gian. | `L10_V001, 1200, 1850, 2100, 2450` |
+
+### 📦 Cấu trúc Bắt buộc của File ZIP:
+```text
+team_submission.zip
+└── submission/
+    ├── query-1-kis.csv
+    ├── query-2-kis.csv
+    ├── query-3-qa.csv
+    └── query-4-trake.csv
+```
+> ⚠️ **LƯU Ý QUAN TRỌNG:**
+> - BẮT BUỘC phải có thư mục `submission/` bên trong file ZIP (hệ thống `package_submission.py` đã tự động xử lý chuẩn xác).
+> - Mỗi file CSV tối đa **100 dòng**, mã hóa **UTF-8**, không có dòng Header.
+> - Mỗi gói truy vấn được nộp tối đa **3 lần** (hệ thống tính điểm theo lần nộp **cuối cùng**).
 
 ---
 
@@ -242,4 +274,5 @@ Bất kỳ lúc nào bạn muốn kiểm tra tính toàn vẹn của mã nguồn
 ```powershell
 .venv\Scripts\python -m unittest discover tests
 ```
-Tất cả 17 unit tests sẽ chạy và báo `OK`.
+Tất cả 20 unit tests sẽ chạy và báo `OK`.
+
