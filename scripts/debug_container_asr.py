@@ -3,7 +3,7 @@ Diagnose AsrSearcher inside backend.
 """
 from app.searchers.asr import AsrSearcher
 from app.stores.keyframe_map import get_keyframe_map
-from app.services.search_service import SearchService, SearchRequest, EventQuery
+
 
 def main():
     print("1. Loading KeyframeMap...")
@@ -21,26 +21,9 @@ def main():
     print(f"Hits for event 0: {len(hits.get(0, []))}")
     for h in hits.get(0, []):
         meta = km.get(h.frame_id)
-        print(f"   Hit fid={h.frame_id} score={h.score:.3f} meta={meta} evidence={h.evidence.get('text') if h.evidence else None}")
-
-    print("\n3. Running Full SearchService...")
-    svc = SearchService()
-    import asyncio
-    req = SearchRequest(
-        mode="single",
-        translate_query=False,
-        events=[
-            EventQuery(
-                asr_query="Hỏa hồng Nhật Tảo oanh thiên địa",
-                searchers={"asr": True, "beit3": False, "clip_h14": False, "siglip2": False, "ocr": False}
-            )
-        ]
-    )
-    res = asyncio.run(svc.search(req))
-    candidates = res.events[0].candidates
-    print(f"Full search result: {len(candidates)} candidates")
-    for c in candidates[:5]:
-        print(f"   Candidate: Video {c.video_id} Frame {c.frame_idx} Time {c.timestamp}s ASR: {c.asr_text[:50]}")
+        ev_text = h.evidence.get('text') if h.evidence else None
+        print(f"   Hit fid={h.frame_id} score={h.score:.3f} meta={meta} evidence={ev_text}")
 
 if __name__ == "__main__":
     main()
+
