@@ -73,26 +73,29 @@ class TextDetector:
         if self.detector is not None:
             try:
                 raw_boxes = []
-                # Thử gọi theo chuẩn PaddleOCR 2.x
-                try:
-                    results = self.detector.ocr(image_bgr, rec=False, cls=True)
-                    if results and len(results) > 0 and results[0]:
-                        raw_boxes = results[0]
-                except (TypeError, Exception):
-                    # Fallback sang PaddleOCR 3.x / PaddleX predict API
-                    predict_res = self.detector.predict(image_bgr)
-                    for p in predict_res:
-                        if hasattr(p, 'get'):
-                            boxes = p.get('dt_polys') or p.get('boxes') or p.get('points')
-                            if boxes:
-                                raw_boxes.extend(boxes)
-                        elif isinstance(p, (list, tuple)):
-                            raw_boxes.extend(p)
+                # 1. Gọi trực tiếp text_detector (DBNet GPU cực nhanh và chuẩn xác)
+                if hasattr(self.detector, "text_detector") and callable(self.detector.text_detector):
+                    try:
+                        res = self.detector.text_detector(image_bgr)
+                        if isinstance(res, tuple) and len(res) > 0 and res[0] is not None:
+                            raw_boxes = res[0]
+                    except Exception:
+                        raw_boxes = []
+
+                # 2. Fallback sang self.detector.ocr(..., rec=False, cls=False)
+                if not raw_boxes:
+                    try:
+                        results = self.detector.ocr(image_bgr, rec=False, cls=False)
+                        if results and len(results) > 0 and results[0] is not None:
+                            raw_boxes = results[0]
+                    except Exception:
+                        raw_boxes = []
 
                 for box in raw_boxes:
                     poly = np.array(box, dtype=np.float32)
                     if poly.ndim != 2 or len(poly) < 4:
                         continue
+
                     area = cv2.contourArea(poly)
                     if area < self.min_box_area:
                         continue

@@ -101,16 +101,9 @@ class BatchTextRecognizer:
                 if res and len(res) > 0 and res[0] and len(res[0]) > 0:
                     paddle_text = str(res[0][0][0]).strip()
                     paddle_conf = float(res[0][0][1])
-            except (TypeError, Exception) as e:
-                try:
-                    predict_res = self.paddle_rec.predict(crop_bgr)
-                    for p in predict_res:
-                        if hasattr(p, 'get') and 'rec_text' in p:
-                            paddle_text = str(p['rec_text']).strip()
-                            paddle_conf = float(p.get('rec_score', 0.85))
-                            break
-                except Exception as e2:
-                    logger.debug(f"PaddleOCR fallback predict failed: {e2}")
+            except Exception as e:
+                logger.debug(f"PaddleOCR recognition failed: {e}")
+
 
         # 2. Chạy VietOCR
         if self.vietocr_detector is not None:
