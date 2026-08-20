@@ -77,17 +77,21 @@ class TextDetector:
                 if hasattr(self.detector, "text_detector") and callable(self.detector.text_detector):
                     try:
                         res = self.detector.text_detector(image_bgr)
-                        if isinstance(res, tuple) and len(res) > 0 and res[0] is not None:
-                            raw_boxes = res[0]
+                        if isinstance(res, (tuple, list)) and len(res) > 0 and res[0] is not None:
+                            boxes = res[0]
+                            if len(boxes) > 0:
+                                raw_boxes = boxes
                     except Exception:
                         raw_boxes = []
 
                 # 2. Fallback sang self.detector.ocr(..., rec=False, cls=False)
-                if not raw_boxes:
+                if len(raw_boxes) == 0:
                     try:
                         results = self.detector.ocr(image_bgr, rec=False, cls=False)
-                        if results and len(results) > 0 and results[0] is not None:
-                            raw_boxes = results[0]
+                        if isinstance(results, (tuple, list)) and len(results) > 0 and results[0] is not None:
+                            boxes = results[0]
+                            if len(boxes) > 0:
+                                raw_boxes = boxes
                     except Exception:
                         raw_boxes = []
 
@@ -95,6 +99,7 @@ class TextDetector:
                     poly = np.array(box, dtype=np.float32)
                     if poly.ndim != 2 or len(poly) < 4:
                         continue
+
 
                     area = cv2.contourArea(poly)
                     if area < self.min_box_area:
