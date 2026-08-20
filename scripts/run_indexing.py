@@ -31,10 +31,12 @@ def main():
     parser.add_argument("--output_dir", type=str, default="data/ocr_results", help="Thư mục xuất kết quả (.parquet, .db, ocr.json)")
     parser.add_argument("--run_name", type=str, default=None, help="Tên phiên bản / Tag lần chạy (ví dụ: 'v1_gpu', 'run_quoc', 'prod_20260820') để tách biệt folder")
     parser.add_argument("--auto_timestamp", action="store_true", help="Tự động gắn timestamp YYYYMMDD_HHMMSS vào tên thư mục để không bao giờ bị ghi đè")
+    parser.add_argument("--config", type=str, default="configs/ocr_config.yaml", help="Đường dẫn file config YAML")
     parser.add_argument("--device", type=str, default=None, help="Thiết bị tính toán: 'cuda' hoặc 'cpu'")
     parser.add_argument("--no_checkpoint", action="store_true", help="Vô hiệu hóa tính năng checkpoint")
 
     args = parser.parse_args()
+
 
     if not os.path.exists(args.keyframes_dir):
         print(f"❌ Lỗi: Thư mục keyframes không tồn tại: {args.keyframes_dir}")
