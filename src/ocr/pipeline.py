@@ -338,6 +338,26 @@ class OCRPipeline:
         backend_json_path = self.indexer.export_backend_ocr_json(all_dedup_records, filename="ocr.json")
         es_bulk_path = self.indexer.export_elasticsearch_bulk(all_dedup_records, filename="frames_ocr_bulk.jsonl")
 
+        # Tự động đồng bộ sang Elasticsearch của hệ thống chính AIC2026 (NoVibeNoLive)
+        try:
+            from scripts.ingest_to_backend import ingest_jsonl_to_elasticsearch
+            es_url = os.getenv("ES_URL", "http://localhost:9200")
+            print(f"\n[Auto-Sync] Dang dong bo truc tiep {len(all_dedup_records):,} ban ghi vao Elasticsearch ({es_url})...")
+            ingest_jsonl_to_elasticsearch(es_bulk_path, es_url=es_url, index_name="frames_ocr")
+        except Exception as e:
+            logger.warning(f"Khong the auto-sync sang Elasticsearch: {e}")
+
+        # Đồng bộ file ocr.json sang /home/quoc/AIC2026/data/ocr.json nếu tồn tại
+        main_system_data = "/home/quoc/AIC2026/data"
+        if os.path.exists(main_system_data):
+            try:
+                import shutil
+                target_json = os.path.join(main_system_data, "ocr.json")
+                shutil.copy2(backend_json_path, target_json)
+                print(f"[Auto-Sync] Da copy file ocr.json sang he thong chinh: {target_json}")
+            except Exception as e:
+                logger.warning(f"Loi khi copy ocr.json sang he thong chinh: {e}")
+
         total_time = time.time() - start_time
         summary = {
             "total_videos": len(video_groups),
@@ -361,6 +381,7 @@ class OCRPipeline:
         print(f"  - File Elasticsearch Bulk JSONL: {es_bulk_path}")
         print(f"  - Toc do trung binh: {summary['avg_fps']} FPS")
         print("=" * 60)
+
 
 
         return summary
